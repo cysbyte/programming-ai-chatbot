@@ -1,19 +1,55 @@
-import { Hono } from "hono";
+import { Context, Hono } from "hono";
 import { supabase } from "@/lib/supabase";
+import { User } from '@supabase/supabase-js';
 
-const app = new Hono()
-  .get("/", (c) => c.json("list of conversations"))
-  .post("/", async (c) => {
+type Variables = {
+  user: User;
+}
+
+type AppType = {
+  Variables: Variables;
+}
+
+// Middleware to check authentication
+const authMiddleware = async (c: Context<AppType>, next: () => Promise<void>) => {
+  const authHeader = c.req.header('Authorization');
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized - No token provided' }, 401);
+  }
+
+  const token = authHeader.split(' ')[1];
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      return c.json({ error: 'Unauthorized - Invalid token' }, 401);
+    }
+
+    c.set('user', user);
+    await next();
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    return c.json({ error: 'Unauthorized - Invalid token' }, 401);
+  }
+};
+
+const app = new Hono<AppType>()
+  .get("/", authMiddleware, (c) => c.json("list of conversations"))
+  .post("/", authMiddleware, async (c) => {
     try {
       console.log("Received POST request");
       const formData = await c.req.formData();
       const userInput = formData.get("userInput") as string;
       const images = formData.getAll("images") as string[];
+      const user = c.get('user');
       
       console.log("Form data received:", {
         userInput,
         imageCount: images.length,
         firstImagePreview: images[0]?.substring(0, 50) + "...",
+        userId: user.id
       });
 
       if (!userInput) {
@@ -38,8 +74,8 @@ const app = new Hono()
               }
               const binaryData = Buffer.from(base64Data, "base64");
               
-              // Generate unique filename
-              const filename = `images/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+              // Generate unique filename with user ID
+              const filename = `images/${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
               console.log(`Generated filename for image ${index + 1}:`, filename);
               
               // Upload to Supabase Storage
@@ -73,12 +109,13 @@ const app = new Hono()
         console.log("All images processed successfully. Image URLs:", imageUrls);
       }
 
-      // Save conversation with image URLs
+      // Save conversation with image URLs and user ID
       console.log("Saving conversation to database...");
       const { data: conversation, error } = await supabase
         .from("conversations")
         .insert([
           {
+            user_id: user.id,
             user_input: userInput,
             image_urls: imageUrls,
           },
@@ -101,6 +138,6 @@ const app = new Hono()
       }, 500);
     }
   })
-  .get("/:id", (c) => c.json(`get ${c.req.param("id")}`));
+  .get("/:id", authMiddleware, (c) => c.json(`get ${c.req.param("id")}`));
 
 export default app;

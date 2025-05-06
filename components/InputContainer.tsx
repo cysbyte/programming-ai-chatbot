@@ -66,8 +66,13 @@ const InputContainer = () => {
   };
 
   const handleStart = async () => {
-    debugger;
     try {
+      // Validate user input
+      if (!userInput.trim()) {
+        setError("Please enter a message");
+        return;
+      }
+
       console.log("Starting conversation with:", { userInput, images });
 
       const formData = new FormData();
@@ -78,6 +83,9 @@ const InputContainer = () => {
 
       const response = await fetch("/api/conversations", {
         method: "POST",
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        },
         body: formData,
       });
 
@@ -92,6 +100,7 @@ const InputContainer = () => {
       // Clear the form after successful submission
       dispatch(setUserInput(""));
       dispatch(clearImages());
+      setError("");
     } catch (error) {
       console.error("Error creating conversation:", error);
       setError(

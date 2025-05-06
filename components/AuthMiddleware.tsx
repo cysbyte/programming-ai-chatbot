@@ -8,7 +8,6 @@ import { RootState } from '@/store';
 export function AuthMiddleware({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  debugger
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
 
   useEffect(() => {
