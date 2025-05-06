@@ -1,15 +1,17 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-interface TaskState {
+interface ConversationState {
   images: string[];
+  userInput: string;
 }
 
-const initialState: TaskState = {
+const initialState: ConversationState = {
   images: [],
+  userInput: "",
 };
 
-export const taskSlice = createSlice({
-  name: 'task',
+export const conversationSlice = createSlice({
+  name: 'conversation',
   initialState,
   reducers: {
     addImage: (state, action: PayloadAction<string>) => {
@@ -23,8 +25,11 @@ export const taskSlice = createSlice({
     clearImages: (state) => {
       state.images = [];
     },
+    setUserInput: (state, action: PayloadAction<string>) => {
+      state.userInput = action.payload;
+    },
   },
 });
 
-export const { addImage, removeImage, clearImages } = taskSlice.actions;
-export default taskSlice.reducer; 
+export const { addImage, removeImage, clearImages, setUserInput } = conversationSlice.actions;
+export default conversationSlice.reducer; 

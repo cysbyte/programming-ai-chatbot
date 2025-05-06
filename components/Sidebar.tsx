@@ -5,17 +5,20 @@ import { BsLayoutTextSidebarReverse } from "react-icons/bs";
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { toggleSidebar } from '@/store/sidebarSlice';
+import { VscAccount } from "react-icons/vsc";
 
 export function Sidebar() {
   const dispatch = useDispatch();
   const isOpen = useSelector((state: RootState) => state.sidebar.isOpen);
+  const { email } = useSelector((state: RootState) => state.auth);
 
   const handleClick = () => {
     dispatch(toggleSidebar());
   }
 
   return (
-    <div className={`h-screen bg-gray-800 text-white transition-all duration-300 ease-in-out ${isOpen ? 'w-64 p-4' : 'w-0 overflow-hidden py-4'}`}>
+    <div className={`h-screen bg-gray-800 text-white transition-all duration-300 ease-in-out flex flex-col justify-between ${isOpen ? 'w-64 p-4' : 'w-0 overflow-hidden py-4'}`}>
+      <div>
       <div className="mb-8">
         <BsLayoutTextSidebarReverse 
           className="text-xl cursor-pointer hover:text-gray-300 transition-colors" 
@@ -41,6 +44,11 @@ export function Sidebar() {
           </li>
         </ul>
       </nav>
+      </div>
+      <div className='flex items-center gap-2 mb-2'>
+        <VscAccount className="text-xl cursor-pointer hover:text-gray-300 transition-colors" size={20}/>
+        <p className="text-sm text-gray-300">{email}</p>
+      </div>
     </div>
   );
 } 

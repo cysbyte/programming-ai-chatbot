@@ -4,15 +4,23 @@ import { IoPlayOutline } from "react-icons/io5";
 import { CiStop1 } from "react-icons/ci";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "@/store";
-import { addImage, removeImage } from "@/store/taskSlice";
+import {
+  addImage,
+  removeImage,
+  setUserInput,
+  clearImages,
+} from "@/store/conversationSlice";
 import Image from "next/image";
 
 const InputContainer = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dispatch = useDispatch();
-  const images = useSelector((state: RootState) => state.task.images);
+  const images = useSelector((state: RootState) => state.conversation.images);
   const [error, setError] = useState<string>("");
+  const userInput = useSelector(
+    (state: RootState) => state.conversation.userInput
+  );
 
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
@@ -35,6 +43,11 @@ const InputContainer = () => {
     fileInputRef.current?.click();
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    dispatch(setUserInput(e.target.value));
+    setError("");
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith("image/")) {
@@ -49,6 +62,41 @@ const InputContainer = () => {
         setError("");
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleStart = async () => {
+    debugger;
+    try {
+      console.log("Starting conversation with:", { userInput, images });
+
+      const formData = new FormData();
+      formData.append("userInput", userInput);
+      images.forEach((image) => {
+        formData.append("images", image);
+      });
+
+      const response = await fetch("/api/conversations", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create conversation");
+      }
+
+      const data = await response.json();
+      console.log("Conversation created successfully:", data);
+
+      // Clear the form after successful submission
+      dispatch(setUserInput(""));
+      dispatch(clearImages());
+    } catch (error) {
+      console.error("Error creating conversation:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to create conversation"
+      );
     }
   };
 
@@ -67,6 +115,8 @@ const InputContainer = () => {
           rows={1}
           onInput={adjustTextareaHeight}
           style={{ minHeight: "24px", maxHeight: "120px" }}
+          value={userInput}
+          onChange={handleChange}
         />
         <div className="flex items-center justify-between gap-2 w-full mt-4">
           <div className="flex items-center gap-2">
@@ -84,10 +134,10 @@ const InputContainer = () => {
               <FiUpload className="text-gray-500 text-xl" size={20} />
             </div>
             {images.length > 0 && (
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 {images.map((image, index) => (
                   <div key={index} className="relative">
-                    <div className="w-8 h-8 rounded-full overflow-hidden">
+                    <div className="w-10 h-8 rounded-full overflow-hidden">
                       <Image
                         src={image}
                         alt={`Uploaded ${index + 1}`}
@@ -101,7 +151,7 @@ const InputContainer = () => {
                         dispatch(removeImage(index));
                         setError("");
                       }}
-                      className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
+                      className="absolute -top-1 -right-1 w-4 h-4 cursor-pointer bg-gray-500 text-white rounded-full flex items-center justify-center text-xs"
                     >
                       ×
                     </button>
@@ -111,7 +161,10 @@ const InputContainer = () => {
             )}
           </div>
           <div className="flex items-center justify-center gap-2">
-            <div className="flex items-center justify-center w-9 h-9 bg-white rounded-full border border-gray-300 cursor-pointer hover:bg-gray-200 transition-all duration-300">
+            <div
+              className="flex items-center justify-center w-9 h-9 bg-white rounded-full border border-gray-300 cursor-pointer hover:bg-gray-200 transition-all duration-300"
+              onClick={handleStart}
+            >
               <IoPlayOutline className="text-gray-500 text-xl" size={20} />
             </div>
             <div className="flex items-center justify-center w-9 h-9 bg-white rounded-full border border-gray-300 cursor-pointer hover:bg-gray-200 transition-all duration-300">
