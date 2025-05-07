@@ -13,42 +13,89 @@ type AppType = {
 
 // Middleware to check authentication
 const authMiddleware = async (c: Context<AppType>, next: () => Promise<void>) => {
+  console.log('Auth middleware started');
   const authHeader = c.req.header('Authorization');
   const refreshToken = c.req.header('Refresh-Token');
-  
+
+  console.log('Auth headers:', {
+    hasAuthHeader: !!authHeader,
+    hasRefreshToken: !!refreshToken,
+    authHeaderPrefix: authHeader?.substring(0, 7)
+  });
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('Auth failed: No valid Bearer token');
     return c.json({ error: 'Unauthorized - No token provided' }, 401);
   }
 
   const token = authHeader.split(' ')[1];
-  
+  console.log('Token extracted, length:', token.length);
+
   try {
+    console.log('Attempting to get user with token');
     const { data: { user }, error } = await supabase.auth.getUser(token);
-    
+
     if (error || !user) {
+      console.log('Token validation failed:', error);
       // Try to refresh the token if refresh token is provided
       if (refreshToken) {
-        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession({
-          refresh_token: refreshToken
-        });
+        console.log('Attempting token refresh');
+        try {
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession({
+            refresh_token: refreshToken
+          });
 
-        if (refreshError || !refreshData.session) {
-          return c.json({ error: 'Unauthorized - Invalid refresh token' }, 401);
+          if (refreshError) {
+            console.log('Token refresh failed:', {
+              error: refreshError,
+              message: refreshError.message,
+              status: refreshError.status,
+              name: refreshError.name
+            });
+
+            // If refresh token is already used, return 401 to force client to re-authenticate
+            if (refreshError.message.includes('Already Used')) {
+              return c.json({
+                error: 'Session expired - Please login again',
+                code: 'REFRESH_TOKEN_USED'
+              }, 401);
+            }
+
+            return c.json({ error: 'Unauthorized - Invalid refresh token' }, 401);
+          }
+
+          if (!refreshData.session) {
+            console.log('No session data in refresh response');
+            return c.json({ error: 'Unauthorized - Invalid refresh token' }, 401);
+          }
+
+          console.log('Token refresh successful, setting new tokens');
+          // Set new tokens in response headers
+          c.header('New-Access-Token', refreshData.session.access_token);
+          c.header('New-Refresh-Token', refreshData.session.refresh_token);
+
+          // Set user from refreshed session
+          c.set('user', refreshData.session.user);
+          await next();
+          return;
+        } catch (refreshError) {
+          console.error('Unexpected error during token refresh:', refreshError);
+          return c.json({
+            error: 'Authentication error - Please try again',
+            code: 'REFRESH_ERROR'
+          }, 401);
         }
-
-        // Set new tokens in response headers
-        c.header('New-Access-Token', refreshData.session.access_token);
-        c.header('New-Refresh-Token', refreshData.session.refresh_token);
-        
-        // Set user from refreshed session
-        c.set('user', refreshData.session.user);
-        await next();
-        return;
       }
-      
+
+      console.log('No refresh token provided, auth failed');
       return c.json({ error: 'Unauthorized - Invalid token' }, 401);
     }
 
+    console.log('Auth successful, user:', {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    });
     c.set('user', user);
     await next();
   } catch (error) {
@@ -67,7 +114,7 @@ const app = new Hono<AppType>()
       const images = formData.getAll("images") as string[];
       const prompt = JSON.parse(formData.get("prompt") as string) as Message[];
       const user = c.get('user');
-      
+
       console.log("Form data received:", {
         userInput,
         imageCount: images.length,
@@ -90,18 +137,18 @@ const app = new Hono<AppType>()
           images.map(async (base64Image, index) => {
             try {
               console.log(`Processing image ${index + 1}/${images.length}`);
-              
+
               // Convert base64 to blob
               const base64Data = base64Image.split(",")[1];
               if (!base64Data) {
                 throw new Error("Invalid base64 image data");
               }
               const binaryData = Buffer.from(base64Data, "base64");
-              
+
               // Generate unique filename with user ID
               const filename = `images/${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
               console.log(`Generated filename for image ${index + 1}:`, filename);
-              
+
               // Upload to Supabase Storage
               console.log(`Uploading image ${index + 1} to Supabase...`);
               const { error } = await supabase.storage
@@ -158,25 +205,33 @@ const app = new Hono<AppType>()
       const aiResponse = await callGptChat(prompt);
       console.log("AI response received:", aiResponse);
 
-      // Update conversation with AI response
-      const { data: updatedConversation, error: updateError } = await supabase
-        .from("conversations")
-        .update({
-          ai_response: aiResponse.response
-        })
-        .eq('id', conversation.id)
-        .select()
-        .single();
+      // Insert both user and assistant messages into prompts table
+      const { error: promptsError } = await supabase
+        .from("prompts")
+        .insert([
+          {
+            conversation_id: conversation.id,
+            role: 'user',
+            content: userInput
+          },
+          {
+            conversation_id: conversation.id,
+            role: 'assistant',
+            content: aiResponse.response
+          }
+        ]);
 
-      if (updateError) {
-        console.error("Error updating conversation with AI response:", updateError);
-        throw updateError;
+      if (promptsError) {
+        console.error("Error inserting prompts:", promptsError);
+        throw promptsError;
       }
 
-      return c.json(updatedConversation, 201);
+      const response = { prompt: [{ role: 'user', content: userInput }, { role: 'assistant', content: aiResponse.response }], conversation: conversation }
+      console.log('response', response);
+      return c.json(response, 201);
     } catch (error) {
       console.error("Error in POST /conversations:", error);
-      return c.json({ 
+      return c.json({
         error: "Failed to create conversation",
         details: error instanceof Error ? error.message : "Unknown error"
       }, 500);

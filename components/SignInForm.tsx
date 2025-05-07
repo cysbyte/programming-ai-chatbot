@@ -146,7 +146,7 @@ const SignInForm = () => {
           );
 
           setCodes(["", "", "", "", "", ""]);
-          router.push("/conversation");
+          router.push("/message");
         }
       }
     } catch (error) {

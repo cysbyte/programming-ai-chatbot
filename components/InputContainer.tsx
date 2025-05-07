@@ -10,11 +10,11 @@ import {
   setUserInput,
   clearImages,
   setConversationId,
-  setRound,
 } from "@/store/conversationSlice";
 import Image from "next/image";
 import { setPrompt } from "@/store/conversationSlice";
 import { Message } from "@/lib/ai-service";
+import { useRouter } from "next/navigation";
 
 const InputContainer = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -27,6 +27,8 @@ const InputContainer = () => {
   );
   const round = useSelector((state: RootState) => state.conversation.round);
   const prompt = useSelector((state: RootState) => state.conversation.prompt);
+  const router = useRouter();
+
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -80,7 +82,6 @@ const InputContainer = () => {
 
       console.log("Starting conversation with:", { userInput, images });
 
-      debugger
       const formData = new FormData();
       formData.append("userInput", userInput);
       formData.append("round", round.toString());
@@ -116,18 +117,31 @@ const InputContainer = () => {
 
       if (!response.ok) {
         const error = await response.json();
+        
+        // Handle 401 Unauthorized
+        if (response.status === 401) {
+          console.log('Session expired, redirecting to signin');
+          // Clear tokens
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          // Redirect to signin page
+          router.push('/');
+          return;
+        }
+        
         throw new Error(error.error || "Failed to create conversation");
       }
 
+      debugger
       const data = await response.json();
       console.log("Conversation created successfully:", data);
-      dispatch(setPrompt([...newPrompt, { role: 'assistant', content: data.message.content }]));
+      dispatch(setPrompt([...prompt, ...data.prompt]));
       // Clear the form after successful submission
       dispatch(setUserInput(""));
       dispatch(clearImages());
-      dispatch(setConversationId(data.id));
-      dispatch(setRound(data.round + 1));
+      dispatch(setConversationId(data.conversation.id));
       setError("");
+      router.push('/conversation');
     } catch (error) {
       console.error("Error creating conversation:", error);
       setError(
