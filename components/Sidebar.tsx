@@ -2,25 +2,18 @@
 
 import Link from 'next/link';
 import { BsLayoutTextSidebarReverse } from "react-icons/bs";
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { toggleSidebar } from '@/store/sidebarSlice';
 import { VscAccount } from "react-icons/vsc";
 import { useEffect, useState } from 'react';
 
-export function Sidebar() {
-  const dispatch = useDispatch();
-  const isOpen = useSelector((state: RootState) => state.sidebar.isOpen);
+export function Sidebar({ isOpen, handleClick }: { isOpen: boolean, handleClick: () => void }) {
   const { email } = useSelector((state: RootState) => state.auth);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  const handleClick = () => {
-    dispatch(toggleSidebar());
-  }
 
   return (
     <div className={`h-screen bg-gray-800 text-white transition-all duration-300 ease-in-out flex flex-col justify-between ${isOpen ? 'w-64 p-4' : 'w-0 overflow-hidden py-4'}`}>

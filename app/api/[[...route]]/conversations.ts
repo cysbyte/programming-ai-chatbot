@@ -1,6 +1,7 @@
 import { Context, Hono } from "hono";
 import { supabase } from "@/lib/supabase";
 import { User } from '@supabase/supabase-js';
+import { callGptChat, Message } from "@/lib/ai-service";
 
 type Variables = {
   user: User;
@@ -13,6 +14,7 @@ type AppType = {
 // Middleware to check authentication
 const authMiddleware = async (c: Context<AppType>, next: () => Promise<void>) => {
   const authHeader = c.req.header('Authorization');
+  const refreshToken = c.req.header('Refresh-Token');
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return c.json({ error: 'Unauthorized - No token provided' }, 401);
@@ -24,6 +26,26 @@ const authMiddleware = async (c: Context<AppType>, next: () => Promise<void>) =>
     const { data: { user }, error } = await supabase.auth.getUser(token);
     
     if (error || !user) {
+      // Try to refresh the token if refresh token is provided
+      if (refreshToken) {
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession({
+          refresh_token: refreshToken
+        });
+
+        if (refreshError || !refreshData.session) {
+          return c.json({ error: 'Unauthorized - Invalid refresh token' }, 401);
+        }
+
+        // Set new tokens in response headers
+        c.header('New-Access-Token', refreshData.session.access_token);
+        c.header('New-Refresh-Token', refreshData.session.refresh_token);
+        
+        // Set user from refreshed session
+        c.set('user', refreshData.session.user);
+        await next();
+        return;
+      }
+      
       return c.json({ error: 'Unauthorized - Invalid token' }, 401);
     }
 
@@ -43,13 +65,15 @@ const app = new Hono<AppType>()
       const formData = await c.req.formData();
       const userInput = formData.get("userInput") as string;
       const images = formData.getAll("images") as string[];
+      const prompt = JSON.parse(formData.get("prompt") as string) as Message[];
       const user = c.get('user');
       
       console.log("Form data received:", {
         userInput,
         imageCount: images.length,
         firstImagePreview: images[0]?.substring(0, 50) + "...",
-        userId: user.id
+        userId: user.id,
+        prompt
       });
 
       if (!userInput) {
@@ -129,7 +153,27 @@ const app = new Hono<AppType>()
       }
       console.log("Conversation saved successfully:", conversation);
 
-      return c.json(conversation, 201);
+      // Call AI service with the prompt
+
+      const aiResponse = await callGptChat(prompt);
+      console.log("AI response received:", aiResponse);
+
+      // Update conversation with AI response
+      const { data: updatedConversation, error: updateError } = await supabase
+        .from("conversations")
+        .update({
+          ai_response: aiResponse.response
+        })
+        .eq('id', conversation.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error("Error updating conversation with AI response:", updateError);
+        throw updateError;
+      }
+
+      return c.json(updatedConversation, 201);
     } catch (error) {
       console.error("Error in POST /conversations:", error);
       return c.json({ 
