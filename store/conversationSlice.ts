@@ -7,7 +7,8 @@ interface ConversationState {
   userInput: string;
   conversationId: string;
   round: number;
-  prompt: Message[];
+  prompts: Message[];
+  isProcessing: boolean;
 }
 
 const initialState: ConversationState = {
@@ -15,7 +16,8 @@ const initialState: ConversationState = {
   userInput: "",
   conversationId: "",
   round: 0,
-  prompt: [],
+  prompts: [],
+  isProcessing: false,
 };
 
 export const conversationSlice = createSlice({
@@ -42,11 +44,14 @@ export const conversationSlice = createSlice({
     setRound: (state, action: PayloadAction<number>) => {
       state.round = action.payload;
     },
-    setPrompt: (state, action: PayloadAction<Message[]>) => {
-      state.prompt = action.payload;
+    setPrompts: (state, action: PayloadAction<Message[]>) => {
+      state.prompts = action.payload;
+    },
+    setIsProcessing: (state, action: PayloadAction<boolean>) => {
+      state.isProcessing = action.payload;
     },
   },
 });
 
-export const { addImage, removeImage, clearImages, setUserInput, setConversationId, setRound, setPrompt } = conversationSlice.actions;
+export const { addImage, removeImage, clearImages, setUserInput, setConversationId, setRound, setPrompts, setIsProcessing } = conversationSlice.actions;
 export default conversationSlice.reducer; 

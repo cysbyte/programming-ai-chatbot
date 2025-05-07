@@ -17,7 +17,7 @@ export function AuthMiddleware({ children }: { children: React.ReactNode }) {
     }
     // If user is authenticated and on the home page
     else if (isAuthenticated && pathname === '/') {
-      router.push('/conversation');
+      router.push('/message');
     }
   }, [isAuthenticated, pathname, router]);
 
